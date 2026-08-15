@@ -1,0 +1,6 @@
+{
+  "appId": "com.roomexpense.manager",
+  "appName": "Room Expense Manager",
+  "webDir": ".",
+  "bundledWebRuntime": false
+}

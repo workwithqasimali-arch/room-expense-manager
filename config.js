@@ -1,6 +1,5 @@
-// Supabase configuration. Fill these two values for live multi-device sync.
-// Project Settings -> API in your Supabase project.
+// Supabase configuration for shared multi-device data.
 window.ROOM_EXPENSE_CONFIG = {
-  supabaseUrl: '',
-  supabaseAnonKey: ''
+  supabaseUrl: 'https://rvgowentutcksofxvnpa.supabase.co',
+  supabaseAnonKey: 'sb_publishable_DTJ1ERbl1URvhN9p4DyaBg__hk9hTgW'
 };

@@ -1,21 +1,35 @@
-# Room Expense App
+# Room Expense Manager — shared roommate version
 
-A complete starter web app for managing shared-room expenses.
+This version adds the workflow requested:
 
-## Features
-- Add, rename, deactivate, and remove roommates
-- Record expenses with payer, amount, date, category, and notes
-- Equal-split calculation across active roommates
-- Automatic balances: who owes whom and who should receive
-- Monthly records with automatic month boundaries
-- Previous-month history and summaries
-- Audit log showing who created/edited/deleted each record
-- Responsive UI for phones, tablets, and desktop
-- Local browser storage for an easy no-server demo
-- Export current month / all data as JSON
-- Import previously exported JSON
+- One household account uses one email + shared account password.
+- The owner creates roommate profiles (Roommate 01, 02, 03, etc.).
+- Every roommate gets a separate profile password.
+- After household login, the user selects their roommate name and enters that profile password.
+- Everyone sees the same monthly totals, every roommate's spending, equal share and settlements.
+- A roommate can add only their own expenses.
+- A roommate can correct only their own expense, including changing 40 SAR back to 30 SAR. They cannot edit another roommate's amount.
+- Admin can add/rename/deactivate roommates and reset profile passwords.
+- Month navigation and history remain available.
+- Change log records additions and corrections.
 
-## Important
-This ZIP is a working client-side prototype. Data is stored in the browser on each device, so it is NOT automatically synchronized between devices.
+## Live multi-device setup (Supabase)
 
-For true multi-device sharing, connect the same UI to a backend such as Supabase/Firebase/PostgreSQL and add authentication. The data model and service boundary are already separated so that can be added cleanly.
+1. Create a Supabase project.
+2. Open SQL Editor and run **backend-schema.sql**.
+3. Open Project Settings → API and copy the **Project URL** and **anon/public key**.
+4. Put them into **config.js**:
+   - `supabaseUrl`
+   - `supabaseAnonKey`
+5. Deploy the folder with the same Cloudflare deployment you already use.
+
+Do not put a Supabase `service_role` key in the browser.
+
+### Email verification
+Supabase may require email confirmation depending on the project's Auth settings. If you want the household email/password to work immediately, configure the project's email-confirmation setting accordingly.
+
+## Important security note
+The requested design intentionally uses one shared Supabase login for the household and a second roommate-profile password. The profile check is enforced by the app UI. This is convenient for a small private household, but it is not equivalent to five independent authenticated user accounts. For stronger security, give each roommate their own Supabase Auth account/email and map each Auth user to exactly one member.
+
+## Local/demo mode
+If `config.js` is left blank, the app runs in local browser mode so the interface can still be tested. Local mode does **not** synchronize between devices.

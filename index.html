@@ -1,95 +1,54 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Room Expense Manager</title>
-<link rel="stylesheet" href="styles.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#17202a"><link rel="manifest" href="manifest.webmanifest">
+<title>Room Expense Manager</title><link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header>
-  <div>
-    <h1>Room Expense Manager</h1>
-    <p>Shared expenses, balances, monthly history and audit trail.</p>
+<div id="toast" class="toast"></div>
+<section id="authScreen" class="auth-screen">
+  <div class="auth-card">
+    <div class="brand-mark">RM</div><h1>Room Expense Manager</h1>
+    <p class="muted">One household account. Separate roommate profiles. Everyone sees the same live expenses.</p>
+    <div id="authModeLogin">
+      <h2>Household login</h2>
+      <label>Email<input id="loginEmail" type="email" autocomplete="email" placeholder="household@email.com"></label>
+      <label>Shared account password<input id="loginPassword" type="password" autocomplete="current-password"></label>
+      <button id="loginBtn" class="full">Continue</button>
+      <button id="showSignup" class="link-btn">Create the household account</button>
+    </div>
+    <div id="authModeSignup" class="hidden">
+      <h2>Create household</h2>
+      <label>Email<input id="signupEmail" type="email" autocomplete="email" placeholder="household@email.com"></label>
+      <label>Shared account password<input id="signupPassword" type="password" autocomplete="new-password" minlength="8"></label>
+      <label>Household name<input id="signupHousehold" placeholder="Our Apartment"></label>
+      <button id="signupBtn" class="full">Create account</button>
+      <button id="showLogin" class="link-btn">Back to login</button>
+    </div>
+    <div id="configNotice" class="notice hidden"></div>
   </div>
-  <div class="user-box">
-    <label>Current user</label>
-    <select id="currentUser"></select>
+</section>
+<section id="memberScreen" class="auth-screen hidden">
+  <div class="auth-card member-card">
+    <div class="brand-mark">RM</div><h1>Choose your profile</h1><p class="muted">This household has separate passwords for each roommate.</p>
+    <div id="memberChoices" class="member-choices"></div>
+    <div id="memberPasswordBox" class="hidden"><label id="memberPasswordLabel">Profile password<input id="memberPassword" type="password" autocomplete="current-password"></label><button id="enterProfile" class="full">Enter my profile</button><button id="backMembers" class="link-btn">Choose another name</button></div>
+    <button id="logoutFromMember" class="link-btn">Log out</button>
   </div>
-</header>
-
+</section>
+<div id="appShell" class="hidden">
+<header><div><h1>Room Expense Manager</h1><p id="householdSubtitle">Shared expenses and monthly balances.</p></div><div class="header-actions"><span id="profileBadge" class="profile-badge"></span><button id="switchProfile" class="secondary">Switch profile</button><button id="logoutBtn" class="danger">Log out</button></div></header>
 <nav>
-  <button data-tab="dashboard" class="active">Dashboard</button>
-  <button data-tab="expenses">Expenses</button>
-  <button data-tab="roommates">Roommates</button>
-  <button data-tab="history">Monthly History</button>
-  <button data-tab="audit">Change Log</button>
-  <button data-tab="data">Data</button>
+<button data-tab="dashboard" class="active">Dashboard</button><button data-tab="expenses">My Expenses</button><button data-tab="roommates">Roommates</button><button data-tab="history">History</button><button data-tab="audit">Change Log</button><button data-tab="data">Data</button>
 </nav>
-
 <main>
-<section id="dashboard" class="tab active">
-  <div class="toolbar">
-    <button id="prevMonth">← Previous</button>
-    <strong id="monthTitle"></strong>
-    <button id="nextMonth">Next →</button>
-  </div>
-  <div id="summaryCards" class="cards"></div>
-  <div class="grid two">
-    <article><h2>Who spent how much?</h2><div id="spendingTable"></div></article>
-    <article><h2>Who owes / receives?</h2><div id="settlementTable"></div></article>
-  </div>
-  <article><h2>Monthly details</h2><div id="monthlyDetails"></div></article>
-</section>
-
-<section id="expenses" class="tab">
-  <article>
-    <h2>Add expense</h2>
-    <form id="expenseForm" class="form-grid">
-      <input type="hidden" id="expenseId">
-      <label>Description<input id="description" placeholder="Electricity"></label>
-      <label>Amount (SAR)<input id="amount" type="number" step="0.01" min="0.01" required></label>
-      <label>Paid by<select id="payer"></select></label>
-      <label>Date<input id="expenseDate" type="date"></label>
-      <label>Category<input id="category" placeholder="Utilities"></label>
-      <label>Notes<input id="notes" placeholder="Optional"></label>
-      <div class="actions"><button type="submit">Save Expense</button><button type="button" id="cancelEdit" class="secondary">Cancel</button></div>
-    </form>
-  </article>
-  <article><h2>Expenses for <span id="expenseMonthTitle"></span></h2><div id="expenseList"></div></article>
-</section>
-
-<section id="roommates" class="tab">
-  <article>
-    <h2>Add roommate</h2>
-    <form id="roommateForm" class="inline-form">
-      <input id="roommateName" required placeholder="Roommate name">
-      <button>Add</button>
-    </form>
-  </article>
-  <article><h2>Roommates</h2><div id="roommateList"></div></article>
-</section>
-
-<section id="history" class="tab">
-  <article>
-    <h2>Monthly history</h2>
-    <p>Each month starts on the 1st and ends on the last calendar day. Past months remain available.</p>
-    <div id="historyList"></div>
-  </article>
-</section>
-
-<section id="audit" class="tab">
-  <article><h2>Change log</h2><p>Every expense and roommate change records the current user, timestamp and action.</p><div id="auditList"></div></article>
-</section>
-
-<section id="data" class="tab">
-  <article>
-    <h2>Data backup</h2>
-    <p>Export a JSON backup, then import it on another browser/device. For automatic live sync, use the backend version described in README.md.</p>
-    <div class="actions"><button id="exportBtn">Export JSON</button><label class="file-button">Import JSON<input type="file" id="importFile" accept=".json"></label><button id="resetBtn" class="danger">Reset all data</button></div>
-  </article>
-</section>
-</main>
-<script src="app.js"></script><script>if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("./service-worker.js"));}</script>
-</body>
-</html>
+<section id="dashboard" class="tab active"><div class="toolbar"><button id="prevMonth">← Previous</button><strong id="monthTitle"></strong><button id="nextMonth">Next →</button></div><div id="summaryCards" class="cards"></div><div class="grid two"><article><h2>Who spent how much?</h2><div id="spendingTable"></div></article><article><h2>Who owes / receives?</h2><div id="settlementTable"></div></article></div><article><h2>Monthly details</h2><div id="monthlyDetails"></div></article></section>
+<section id="expenses" class="tab"><article><h2>Add my expense</h2><p class="muted">You can only add or correct expenses belonging to your own profile.</p><form id="expenseForm" class="form-grid"><input type="hidden" id="expenseId"><label>Description<input id="description" placeholder="Electricity" required></label><label>Amount (SAR)<input id="amount" type="number" step="0.01" min="0.01" required></label><label>Date<input id="expenseDate" type="date" required></label><label>Category<input id="category" placeholder="Utilities"></label><label class="span2">Notes<input id="notes" placeholder="Optional"></label><div class="actions span2"><button type="submit">Save expense</button><button type="button" id="cancelEdit" class="secondary">Cancel</button></div></form></article><article><h2>My expenses for <span id="expenseMonthTitle"></span></h2><div id="expenseList"></div></article></section>
+<section id="roommates" class="tab"><article id="adminRoommateTools"><h2>Add roommate</h2><form id="roommateForm" class="inline-form"><input id="roommateName" required placeholder="Roommate 01"><input id="roommatePassword" type="password" required minlength="4" placeholder="Profile password"><button>Add roommate</button></form><p class="muted">Only the household account owner can add, rename, activate, deactivate, or reset roommate passwords.</p></article><article><h2>Roommates</h2><div id="roommateList"></div></article></section>
+<section id="history" class="tab"><article><h2>Monthly history</h2><p class="muted">Past months remain available. Every roommate can view the totals.</p><div id="historyList"></div></article></section>
+<section id="audit" class="tab"><article><h2>Change log</h2><p class="muted">Shows who added or corrected a record.</p><div id="auditList"></div></article></section>
+<section id="data" class="tab"><article><h2>Data & account</h2><p id="syncStatus"></p><div class="actions"><button id="exportBtn">Export JSON</button><label class="file-button">Import JSON<input type="file" id="importFile" accept=".json"></label><button id="resetBtn" class="danger admin-only">Reset local data</button></div><hr><h3>Household login</h3><p class="muted">All roommates use the same household email and shared account password, then select their own name and enter their profile password.</p></article></section>
+</main></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="config.js"></script><script src="app.js"></script>
+</body></html>

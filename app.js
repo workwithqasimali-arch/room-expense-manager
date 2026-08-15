@@ -3,7 +3,9 @@
 */
 const cfg = window.ROOM_EXPENSE_CONFIG || {};
 const live = !!(cfg.supabaseUrl && cfg.supabaseAnonKey && window.supabase);
-const sb = live ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey) : null;
+const sb = live
+  ? window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey)
+  : null;
 
 let db = { household: null, roommates: [], expenses: [], audit: [] };
 let session = { member: null, isAdmin: false };
@@ -13,42 +15,79 @@ let selectedMemberId = null;
 let realtimeChannel = null;
 let refreshTimer = null;
 
-const $ = id => document.getElementById(id);
+const $ = (id) => document.getElementById(id);
 const id = () => crypto.randomUUID();
 
 function monthKey(d) {
   const x = new Date(`${d}T00:00:00`);
-  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`;
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}`;
 }
 function monthLabel(k) {
-  const [y, m] = k.split('-');
-  return new Date(+y, +m - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const [y, m] = k.split("-");
+  return new Date(+y, +m - 1, 1).toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
 }
-function currentKey() { return monthKey(viewMonth.toISOString().slice(0, 10)); }
-function money(n) { return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' SAR'; }
-function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+function currentKey() {
+  return monthKey(viewMonth.toISOString().slice(0, 10));
+}
+function money(n) {
+  return (
+    Number(n || 0).toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }) + " SAR"
+  );
+}
+function esc(s) {
+  return String(s ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+}
 function toast(msg, error = false) {
-  const el = $('toast');
+  const el = $("toast");
   if (!el) return;
   el.textContent = msg;
-  el.className = 'toast show ' + (error ? 'error' : '');
-  setTimeout(() => el.className = 'toast', 3000);
+  el.className = "toast show " + (error ? "error" : "");
+  setTimeout(() => (el.className = "toast"), 3000);
 }
-function show(el, on = true) { if (el) el.classList.toggle('hidden', !on); }
-function activeRoommates() { return db.roommates.filter(r => r.active); }
-function monthExpenses(k = currentKey()) { return db.expenses.filter(e => monthKey(e.date) === k); }
+function show(el, on = true) {
+  if (el) el.classList.toggle("hidden", !on);
+}
+function activeRoommates() {
+  return db.roommates.filter((r) => r.active);
+}
+function monthExpenses(k = currentKey()) {
+  return db.expenses.filter((e) => monthKey(e.date) === k);
+}
 
 function calc(k = currentKey()) {
   const rs = activeRoommates();
   const es = monthExpenses(k);
   const total = es.reduce((s, e) => s + Number(e.amount), 0);
   const spent = {};
-  rs.forEach(r => spent[r.id] = 0);
-  es.forEach(e => spent[e.payerId] = (spent[e.payerId] || 0) + Number(e.amount));
+  rs.forEach((r) => (spent[r.id] = 0));
+  es.forEach(
+    (e) => (spent[e.payerId] = (spent[e.payerId] || 0) + Number(e.amount)),
+  );
   const share = rs.length ? total / rs.length : 0;
-  const balance = rs.map(r => ({ id: r.id, name: r.name, spent: spent[r.id] || 0, balance: (spent[r.id] || 0) - share }));
-  const creditors = balance.filter(x => x.balance > 0.005).map(x => ({ ...x, amount: x.balance }));
-  const debtors = balance.filter(x => x.balance < -0.005).map(x => ({ ...x, amount: -x.balance }));
+  const balance = rs.map((r) => ({
+    id: r.id,
+    name: r.name,
+    spent: spent[r.id] || 0,
+    balance: (spent[r.id] || 0) - share,
+  }));
+  const creditors = balance
+    .filter((x) => x.balance > 0.005)
+    .map((x) => ({ ...x, amount: x.balance }));
+  const debtors = balance
+    .filter((x) => x.balance < -0.005)
+    .map((x) => ({ ...x, amount: -x.balance }));
   const settlements = [];
   for (const c of creditors) {
     for (const d of debtors) {
@@ -65,19 +104,36 @@ function calc(k = currentKey()) {
 
 async function hashPassword(p) {
   const data = new TextEncoder().encode(p);
-  const salt = new TextEncoder().encode('room-expense-v2-static-salt');
-  const key = await crypto.subtle.importKey('raw', data, 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt, iterations:120000, hash:'SHA-256' }, key, 256);
-  return [...new Uint8Array(bits)].map(x => x.toString(16).padStart(2, '0')).join('');
+  const salt = new TextEncoder().encode("room-expense-v2-static-salt");
+  const key = await crypto.subtle.importKey("raw", data, "PBKDF2", false, [
+    "deriveBits",
+  ]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 120000, hash: "SHA-256" },
+    key,
+    256,
+  );
+  return [...new Uint8Array(bits)]
+    .map((x) => x.toString(16).padStart(2, "0"))
+    .join("");
 }
+window.ROOM_EXPENSE_CONFIG = {
+  supabaseUrl: "https://rvgowentutcksofxvnpa.supabase.co",
 
+  supabaseAnonKey:
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2Z293ZW50dXRja3NvZnh2bnBhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY3NjQwNzQsImV4cCI6MjEwMjM0MDA3NH0.MRBoe0OeGSYnQ9YFj5iGlVFQ4N6tzJtg-ng5KaaoKtE",
+};
 function requireCloud() {
-  if (!live || !sb) throw new Error('Supabase is not configured. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in config.js.');
+  if (!live || !sb)
+    throw new Error(
+      "Supabase is not configured. Add SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in config.js.",
+    );
 }
 function requireHousehold() {
-  if (!db.household?.id) throw new Error('No cloud household is loaded. Please log in again.');
+  if (!db.household?.id)
+    throw new Error("No cloud household is loaded. Please log in again.");
 }
-function handleDbError(error, fallback = 'Database operation failed') {
+function handleDbError(error, fallback = "Database operation failed") {
   console.error(error);
   toast(error?.message || fallback, true);
 }
@@ -86,45 +142,95 @@ async function currentUser() {
   requireCloud();
   const { data, error } = await sb.auth.getUser();
   if (error) throw error;
-  if (!data?.user) throw new Error('Your login session has expired. Please log in again.');
+  if (!data?.user)
+    throw new Error("Your login session has expired. Please log in again.");
   return data.user;
 }
 
 async function loadCloud() {
   requireCloud();
   const user = await currentUser();
-  const { data: hs, error: he } = await sb.from('households').select('*').eq('owner_user_id', user.id).limit(1);
+  const { data: hs, error: he } = await sb
+    .from("households")
+    .select("*")
+    .eq("owner_user_id", user.id)
+    .limit(1);
   if (he) throw he;
-  if (!hs?.length) throw new Error('No household found for this email account. This account has not created a household yet.');
+  if (!hs?.length)
+    throw new Error(
+      "No household found for this email account. This account has not created a household yet.",
+    );
 
   const h = hs[0];
   const [m, e, a] = await Promise.all([
-    sb.from('members').select('*').eq('household_id', h.id).order('created_at', { ascending: true }),
-    sb.from('expenses').select('*').eq('household_id', h.id).order('expense_date', { ascending: false }),
-    sb.from('audit_log').select('*').eq('household_id', h.id).order('created_at', { ascending: false })
+    sb
+      .from("members")
+      .select("*")
+      .eq("household_id", h.id)
+      .order("created_at", { ascending: true }),
+    sb
+      .from("expenses")
+      .select("*")
+      .eq("household_id", h.id)
+      .order("expense_date", { ascending: false }),
+    sb
+      .from("audit_log")
+      .select("*")
+      .eq("household_id", h.id)
+      .order("created_at", { ascending: false }),
   ]);
   if (m.error) throw m.error;
   if (e.error) throw e.error;
   if (a.error) throw a.error;
 
-  db.household = { id:h.id, name:h.name, email:h.email, owner_user_id:h.owner_user_id };
-  db.roommates = (m.data || []).map(x => ({ id:x.id, name:x.name, active:x.active, passwordHash:x.password_hash, isAdmin:!!x.is_admin }));
-  db.expenses = (e.data || []).map(x => ({ id:x.id, description:x.description || '', amount:Number(x.amount), payerId:x.payer_member_id, date:x.expense_date, category:x.category || '', notes:x.notes || '', createdBy:x.created_by_member_id, updatedAt:x.updated_at }));
-  db.audit = (a.data || []).map(x => ({ id:x.id, action:x.action, type:x.entity_type, recordId:x.entity_id, details:x.details?.text || '', user:x.details?.user || memberName(x.actor_member_id), actorMemberId:x.actor_member_id, at:x.created_at }));
+  db.household = {
+    id: h.id,
+    name: h.name,
+    email: h.email,
+    owner_user_id: h.owner_user_id,
+  };
+  db.roommates = (m.data || []).map((x) => ({
+    id: x.id,
+    name: x.name,
+    active: x.active,
+    passwordHash: x.password_hash,
+    isAdmin: !!x.is_admin,
+  }));
+  db.expenses = (e.data || []).map((x) => ({
+    id: x.id,
+    description: x.description || "",
+    amount: Number(x.amount),
+    payerId: x.payer_member_id,
+    date: x.expense_date,
+    category: x.category || "",
+    notes: x.notes || "",
+    createdBy: x.created_by_member_id,
+    updatedAt: x.updated_at,
+  }));
+  db.audit = (a.data || []).map((x) => ({
+    id: x.id,
+    action: x.action,
+    type: x.entity_type,
+    recordId: x.entity_id,
+    details: x.details?.text || "",
+    user: x.details?.user || memberName(x.actor_member_id),
+    actorMemberId: x.actor_member_id,
+    at: x.created_at,
+  }));
 
   if (session.member) {
-    const fresh = db.roommates.find(r => r.id === session.member.id);
+    const fresh = db.roommates.find((r) => r.id === session.member.id);
     if (fresh && fresh.active) {
       session.member = fresh;
       session.isAdmin = !!fresh.isAdmin;
     } else {
-      session = { member:null, isAdmin:false };
+      session = { member: null, isAdmin: false };
     }
   }
 }
 
 function memberName(memberId) {
-  return db.roommates.find(r => r.id === memberId)?.name || 'System';
+  return db.roommates.find((r) => r.id === memberId)?.name || "System";
 }
 
 async function insertAudit(action, type, recordId, details) {
@@ -132,248 +238,710 @@ async function insertAudit(action, type, recordId, details) {
   requireHousehold();
   const actor = session.member?.id || null;
   const row = {
-    id:id(), household_id:db.household.id, actor_member_id:actor,
-    action, entity_type:type, entity_id:recordId || null,
-    details:{ text:String(details || ''), user:session.member?.name || 'System' },
-    created_at:new Date().toISOString()
+    id: id(),
+    household_id: db.household.id,
+    actor_member_id: actor,
+    action,
+    entity_type: type,
+    entity_id: recordId || null,
+    details: {
+      text: String(details || ""),
+      user: session.member?.name || "System",
+    },
+    created_at: new Date().toISOString(),
   };
-  const { error } = await sb.from('audit_log').insert(row);
+  const { error } = await sb.from("audit_log").insert(row);
   if (error) throw error;
-  db.audit.unshift({ id:row.id, action, type, recordId:recordId || null, details:String(details || ''), user:session.member?.name || 'System', actorMemberId:actor, at:row.created_at });
+  db.audit.unshift({
+    id: row.id,
+    action,
+    type,
+    recordId: recordId || null,
+    details: String(details || ""),
+    user: session.member?.name || "System",
+    actorMemberId: actor,
+    at: row.created_at,
+  });
 }
 
 async function ensureCloudReady() {
-  if (!live) throw new Error('Shared cloud mode is not configured.');
+  if (!live) throw new Error("Shared cloud mode is not configured.");
   await currentUser();
   requireHousehold();
 }
 
 function render() {
-  renderDashboard(); renderExpenses(); renderRoommates(); renderHistory(); renderAudit();
-  if ($('syncStatus')) $('syncStatus').innerHTML = live ? '🟢 Connected to shared cloud database.' : '🔴 Cloud mode is not configured.';
+  renderDashboard();
+  renderExpenses();
+  renderRoommates();
+  renderHistory();
+  renderAudit();
+  if ($("syncStatus"))
+    $("syncStatus").innerHTML = live
+      ? "🟢 Connected to shared cloud database."
+      : "🔴 Cloud mode is not configured.";
 }
 
 function renderDashboard() {
-  const k = currentKey(), c = calc(k);
-  $('monthTitle').textContent = monthLabel(k);
-  $('expenseMonthTitle').textContent = monthLabel(k);
-  $('summaryCards').innerHTML = [['Total spent',money(c.total)],['Equal share',money(c.share)],['Expenses',c.es.length],['Roommates',c.rs.length]].map(x => `<div class="card"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('');
-  $('spendingTable').innerHTML = c.rs.length ? `<table><tr><th>Roommate</th><th>Spent</th><th>Share</th><th>Difference</th></tr>${c.balance.map(x => `<tr><td>${esc(x.name)}</td><td>${money(x.spent)}</td><td>${money(c.share)}</td><td class="${x.balance>=0?'positive':'negative'}">${x.balance>=0?'+':''}${money(x.balance)}</td></tr>`).join('')}</table>` : '<div class="empty">Add roommates first.</div>';
-  $('settlementTable').innerHTML = c.settlements.length ? `<table><tr><th>Who pays</th><th>Who receives</th><th>Amount</th></tr>${c.settlements.map(x => `<tr><td>${esc(x.from)}</td><td>${esc(x.to)}</td><td>${money(x.amount)}</td></tr>`).join('')}</table>` : '<div class="empty">Everyone is settled.</div>';
-  const top = c.balance.slice().sort((a,b) => b.spent-a.spent)[0];
-  $('monthlyDetails').innerHTML = `<p><b>${monthLabel(k)}</b></p><p>Most spent: <b>${esc(top?.name || '—')}</b> · Highest single expense: <b>${money(Math.max(0,...c.es.map(e=>Number(e.amount))))}</b></p>`;
+  const k = currentKey(),
+    c = calc(k);
+  $("monthTitle").textContent = monthLabel(k);
+  $("expenseMonthTitle").textContent = monthLabel(k);
+  $("summaryCards").innerHTML = [
+    ["Total spent", money(c.total)],
+    ["Equal share", money(c.share)],
+    ["Expenses", c.es.length],
+    ["Roommates", c.rs.length],
+  ]
+    .map(
+      (x) =>
+        `<div class="card"><span>${x[0]}</span><strong>${x[1]}</strong></div>`,
+    )
+    .join("");
+  $("spendingTable").innerHTML = c.rs.length
+    ? `<table><tr><th>Roommate</th><th>Spent</th><th>Share</th><th>Difference</th></tr>${c.balance.map((x) => `<tr><td>${esc(x.name)}</td><td>${money(x.spent)}</td><td>${money(c.share)}</td><td class="${x.balance >= 0 ? "positive" : "negative"}">${x.balance >= 0 ? "+" : ""}${money(x.balance)}</td></tr>`).join("")}</table>`
+    : '<div class="empty">Add roommates first.</div>';
+  $("settlementTable").innerHTML = c.settlements.length
+    ? `<table><tr><th>Who pays</th><th>Who receives</th><th>Amount</th></tr>${c.settlements.map((x) => `<tr><td>${esc(x.from)}</td><td>${esc(x.to)}</td><td>${money(x.amount)}</td></tr>`).join("")}</table>`
+    : '<div class="empty">Everyone is settled.</div>';
+  const top = c.balance.slice().sort((a, b) => b.spent - a.spent)[0];
+  $("monthlyDetails").innerHTML =
+    `<p><b>${monthLabel(k)}</b></p><p>Most spent: <b>${esc(top?.name || "—")}</b> · Highest single expense: <b>${money(Math.max(0, ...c.es.map((e) => Number(e.amount))))}</b></p>`;
 }
 
 function renderExpenses() {
-  const es = monthExpenses().filter(e => e.payerId === session.member?.id).sort((a,b) => b.date.localeCompare(a.date));
-  $('expenseList').innerHTML = es.length ? `<table><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th></th></tr>${es.map(e => `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td><span class="tag">${esc(e.category||'Other')}</span></td><td>${money(e.amount)}</td><td class="row-actions"><button onclick="editExpense('${e.id}')">Correct</button><button onclick="deleteExpense('${e.id}')">Delete</button></td></tr>`).join('')}</table>` : '<div class="empty">You have no expenses this month.</div>';
+  const es = monthExpenses()
+    .filter((e) => e.payerId === session.member?.id)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  $("expenseList").innerHTML = es.length
+    ? `<table><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th><th></th></tr>${es.map((e) => `<tr><td>${e.date}</td><td>${esc(e.description)}</td><td><span class="tag">${esc(e.category || "Other")}</span></td><td>${money(e.amount)}</td><td class="row-actions"><button onclick="editExpense('${e.id}')">Correct</button><button onclick="deleteExpense('${e.id}')">Delete</button></td></tr>`).join("")}</table>`
+    : '<div class="empty">You have no expenses this month.</div>';
 }
 function renderRoommates() {
-  $('roommateList').innerHTML = db.roommates.map(r => `<div class="roommate-row"><div><b>${esc(r.name)}</b> ${r.active?'':'<span class="tag">inactive</span>'}<small>${r.isAdmin?'Admin profile':'Roommate profile'}</small></div>${session.isAdmin?`<div class="row-actions"><button onclick="renameRoommate('${r.id}')">Rename</button><button onclick="resetRoommatePassword('${r.id}')">Reset password</button><button onclick="toggleRoommate('${r.id}')">${r.active?'Deactivate':'Activate'}</button></div>`:''}</div>`).join('');
+  $("roommateList").innerHTML = db.roommates
+    .map(
+      (r) =>
+        `<div class="roommate-row"><div><b>${esc(r.name)}</b> ${r.active ? "" : '<span class="tag">inactive</span>'}<small>${r.isAdmin ? "Admin profile" : "Roommate profile"}</small></div>${session.isAdmin ? `<div class="row-actions"><button onclick="renameRoommate('${r.id}')">Rename</button><button onclick="resetRoommatePassword('${r.id}')">Reset password</button><button onclick="toggleRoommate('${r.id}')">${r.active ? "Deactivate" : "Activate"}</button></div>` : ""}</div>`,
+    )
+    .join("");
 }
 function renderHistory() {
-  let keys = [...new Set(db.expenses.map(e => monthKey(e.date)))].sort().reverse();
+  let keys = [...new Set(db.expenses.map((e) => monthKey(e.date)))]
+    .sort()
+    .reverse();
   if (!keys.includes(currentKey())) keys.unshift(currentKey());
-  $('historyList').innerHTML = keys.map(k => { const c=calc(k); return `<div class="card history-card"><b>${monthLabel(k)}</b><p>Total ${money(c.total)} · ${c.es.length} expenses · Equal share ${money(c.share)}</p><p>${c.balance.map(x => `${esc(x.name)}: ${money(x.spent)}`).join(' · ')}</p><button onclick="jumpMonth('${k}')">Open month</button></div>`; }).join('');
+  $("historyList").innerHTML = keys
+    .map((k) => {
+      const c = calc(k);
+      return `<div class="card history-card"><b>${monthLabel(k)}</b><p>Total ${money(c.total)} · ${c.es.length} expenses · Equal share ${money(c.share)}</p><p>${c.balance.map((x) => `${esc(x.name)}: ${money(x.spent)}`).join(" · ")}</p><button onclick="jumpMonth('${k}')">Open month</button></div>`;
+    })
+    .join("");
 }
 function renderAudit() {
-  $('auditList').innerHTML = db.audit.length ? `<table><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th></tr>${db.audit.map(a => `<tr><td>${new Date(a.at).toLocaleString()}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.details)}</td></tr>`).join('')}</table>` : '<div class="empty">No changes recorded.</div>';
+  $("auditList").innerHTML = db.audit.length
+    ? `<table><tr><th>Time</th><th>User</th><th>Action</th><th>Details</th></tr>${db.audit.map((a) => `<tr><td>${new Date(a.at).toLocaleString()}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td>${esc(a.details)}</td></tr>`).join("")}</table>`
+    : '<div class="empty">No changes recorded.</div>';
 }
 
 function resetMemberScreen() {
   selectedMemberId = null;
-  $('memberPassword').value = '';
-  show($('memberPasswordBox'), false);
-  const members = db.roommates.filter(r => r.active);
-  $('memberChoices').innerHTML = members.map(r => `<button class="member-choice" data-member="${r.id}"><span>${esc(r.name)}</span><small>${r.isAdmin?'Household admin':'Roommate'}</small></button>`).join('') || '<p class="muted">No roommates have been added yet.</p>';
-  document.querySelectorAll('.member-choice').forEach(b => b.onclick = () => {
-    selectedMemberId = b.dataset.member;
-    const r = db.roommates.find(x => x.id === selectedMemberId);
-    $('memberPasswordLabel').firstChild.textContent = `${r?.name || 'Roommate'} password`;
-    show($('memberPasswordBox'));
-    $('memberPassword').focus();
-  });
+  $("memberPassword").value = "";
+  show($("memberPasswordBox"), false);
+  const members = db.roommates.filter((r) => r.active);
+  $("memberChoices").innerHTML =
+    members
+      .map(
+        (r) =>
+          `<button class="member-choice" data-member="${r.id}"><span>${esc(r.name)}</span><small>${r.isAdmin ? "Household admin" : "Roommate"}</small></button>`,
+      )
+      .join("") || '<p class="muted">No roommates have been added yet.</p>';
+  document.querySelectorAll(".member-choice").forEach(
+    (b) =>
+      (b.onclick = () => {
+        selectedMemberId = b.dataset.member;
+        const r = db.roommates.find((x) => x.id === selectedMemberId);
+        $("memberPasswordLabel").firstChild.textContent =
+          `${r?.name || "Roommate"} password`;
+        show($("memberPasswordBox"));
+        $("memberPassword").focus();
+      }),
+  );
 }
 
 function applyPermissions() {
-  show($('adminRoommateTools'), session.isAdmin);
-  document.querySelectorAll('.admin-only').forEach(x => show(x, session.isAdmin));
+  show($("adminRoommateTools"), session.isAdmin);
+  document
+    .querySelectorAll(".admin-only")
+    .forEach((x) => show(x, session.isAdmin));
 }
 
 async function enterMember() {
   try {
-    const r = db.roommates.find(x => x.id === selectedMemberId), p = $('memberPassword').value;
-    if (!r || !p) return toast('Choose a profile and enter its password', true);
-    if ((await hashPassword(p)) !== r.passwordHash) return toast('Incorrect profile password', true);
-    session.member = r; session.isAdmin = !!r.isAdmin;
-    show($('memberScreen'), false); show($('appShell'));
-    $('profileBadge').textContent = `${r.name}${session.isAdmin?' · Admin':''}`;
-    $('householdSubtitle').textContent = `${db.household.name} · Live shared household`;
-    applyPermissions(); render(); subscribeRealtime();
+    const r = db.roommates.find((x) => x.id === selectedMemberId),
+      p = $("memberPassword").value;
+    if (!r || !p) return toast("Choose a profile and enter its password", true);
+    if ((await hashPassword(p)) !== r.passwordHash)
+      return toast("Incorrect profile password", true);
+    session.member = r;
+    session.isAdmin = !!r.isAdmin;
+    show($("memberScreen"), false);
+    show($("appShell"));
+    $("profileBadge").textContent =
+      `${r.name}${session.isAdmin ? " · Admin" : ""}`;
+    $("householdSubtitle").textContent =
+      `${db.household.name} · Live shared household`;
+    applyPermissions();
+    render();
+    subscribeRealtime();
     toast(`Welcome, ${r.name}`);
-  } catch(e) { handleDbError(e); }
+  } catch (e) {
+    handleDbError(e);
+  }
 }
 
 async function createHousehold() {
-  if (!live) return toast('Configure Supabase first. This app requires cloud mode for shared data.', true);
-  const email=$('signupEmail').value.trim(), pw=$('signupPassword').value, hn=$('signupHousehold').value.trim()||'Our Apartment';
-  if (!email || !/^\S+@\S+\.\S+$/.test(email)) return toast('Enter a valid email', true);
-  if (pw.length < 8) return toast('Use an 8+ character shared password', true);
+  if (!live)
+    return toast(
+      "Configure Supabase first. This app requires cloud mode for shared data.",
+      true,
+    );
+  const email = $("signupEmail").value.trim(),
+    pw = $("signupPassword").value,
+    hn = $("signupHousehold").value.trim() || "Our Apartment";
+  if (!email || !/^\S+@\S+\.\S+$/.test(email))
+    return toast("Enter a valid email", true);
+  if (pw.length < 8) return toast("Use an 8+ character shared password", true);
   try {
-    const { data, error } = await sb.auth.signUp({ email, password:pw });
+    const { data, error } = await sb.auth.signUp({ email, password: pw });
     if (error) throw error;
-    if (!data.user) throw new Error('Could not create the Supabase account.');
-    if (!data.session) return toast('Account created. Confirm the email, then log in with the same email and password.', true);
-    const householdId=id(), memberId=id(), passwordHash=await hashPassword(pw);
-    const { error: he } = await sb.from('households').insert({ id:householdId, name:hn, email, owner_user_id:data.user.id });
+    if (!data.user) throw new Error("Could not create the Supabase account.");
+    if (!data.session)
+      return toast(
+        "Account created. Confirm the email, then log in with the same email and password.",
+        true,
+      );
+    const householdId = id(),
+      memberId = id(),
+      passwordHash = await hashPassword(pw);
+    const { error: he } = await sb.from("households").insert({
+      id: householdId,
+      name: hn,
+      email,
+      owner_user_id: data.user.id,
+    });
     if (he) throw he;
-    const { error: me } = await sb.from('members').insert({ id:memberId, household_id:householdId, name:'Roommate 01', active:true, password_hash:passwordHash, is_admin:true });
-    if (me) { await sb.from('households').delete().eq('id',householdId); throw me; }
-    db.household={id:householdId,name:hn,email,owner_user_id:data.user.id};
+    const { error: me } = await sb.from("members").insert({
+      id: memberId,
+      household_id: householdId,
+      name: "Roommate 01",
+      active: true,
+      password_hash: passwordHash,
+      is_admin: true,
+    });
+    if (me) {
+      await sb.from("households").delete().eq("id", householdId);
+      throw me;
+    }
+    db.household = {
+      id: householdId,
+      name: hn,
+      email,
+      owner_user_id: data.user.id,
+    };
     await loadCloud();
-    session={member:null,isAdmin:false};
-    toast('Household created. Add the other roommates.');
-    show($('authScreen'),false); resetMemberScreen(); show($('memberScreen'));
-  } catch(e) { handleDbError(e, 'Could not create household'); }
+    session = { member: null, isAdmin: false };
+    toast("Household created. Add the other roommates.");
+    show($("authScreen"), false);
+    resetMemberScreen();
+    show($("memberScreen"));
+  } catch (e) {
+    handleDbError(e, "Could not create household");
+  }
 }
 
 async function login() {
-  const email=$('loginEmail').value.trim(), pw=$('loginPassword').value;
-  if (!email || !pw) return toast('Enter email and password', true);
-  if (!live) return toast('Supabase is not configured. Add your URL and publishable key to config.js.', true);
+  const email = $("loginEmail").value.trim(),
+    pw = $("loginPassword").value;
+  if (!email || !pw) return toast("Enter email and password", true);
+  if (!live)
+    return toast(
+      "Supabase is not configured. Add your URL and publishable key to config.js.",
+      true,
+    );
   try {
-    const { error } = await sb.auth.signInWithPassword({ email, password:pw });
+    const { error } = await sb.auth.signInWithPassword({ email, password: pw });
     if (error) throw error;
     await loadCloud();
-    session={member:null,isAdmin:false};
-    show($('authScreen'),false); show($('appShell'),false); resetMemberScreen(); show($('memberScreen'));
-    toast(`Cloud household loaded: ${db.roommates.length} roommate${db.roommates.length===1?'':'s'}`);
-  } catch(e) { handleDbError(e, 'Login failed'); }
+    session = { member: null, isAdmin: false };
+    show($("authScreen"), false);
+    show($("appShell"), false);
+    resetMemberScreen();
+    show($("memberScreen"));
+    toast(
+      `Cloud household loaded: ${db.roommates.length} roommate${db.roommates.length === 1 ? "" : "s"}`,
+    );
+  } catch (e) {
+    handleDbError(e, "Login failed");
+  }
 }
 
 async function logout() {
-  try { if (realtimeChannel) { await sb.removeChannel(realtimeChannel); realtimeChannel=null; } if(live) await sb.auth.signOut(); }
-  catch(e) { console.error(e); }
-  session={member:null,isAdmin:false}; db={household:null,roommates:[],expenses:[],audit:[]};
-  show($('appShell'),false); show($('memberScreen'),false); show($('authScreen'));
+  try {
+    if (realtimeChannel) {
+      await sb.removeChannel(realtimeChannel);
+      realtimeChannel = null;
+    }
+    if (live) await sb.auth.signOut();
+  } catch (e) {
+    console.error(e);
+  }
+  session = { member: null, isAdmin: false };
+  db = { household: null, roommates: [], expenses: [], audit: [] };
+  show($("appShell"), false);
+  show($("memberScreen"), false);
+  show($("authScreen"));
 }
 
 async function refreshCloudAndRender() {
   if (!live || !db.household?.id) return;
-  try { await loadCloud(); if (session.member) { const r=db.roommates.find(x=>x.id===session.member.id); if(r){session.member=r;session.isAdmin=!!r.isAdmin;} else {session={member:null,isAdmin:false};show($('appShell'),false);show($('memberScreen'));resetMemberScreen();return;} } render(); applyPermissions(); }
-  catch(e) { console.error(e); toast('Could not refresh shared data. Please check your connection.', true); }
+  try {
+    await loadCloud();
+    if (session.member) {
+      const r = db.roommates.find((x) => x.id === session.member.id);
+      if (r) {
+        session.member = r;
+        session.isAdmin = !!r.isAdmin;
+      } else {
+        session = { member: null, isAdmin: false };
+        show($("appShell"), false);
+        show($("memberScreen"));
+        resetMemberScreen();
+        return;
+      }
+    }
+    render();
+    applyPermissions();
+  } catch (e) {
+    console.error(e);
+    toast("Could not refresh shared data. Please check your connection.", true);
+  }
 }
 
 function scheduleRefresh() {
   clearTimeout(refreshTimer);
-  refreshTimer=setTimeout(refreshCloudAndRender,350);
+  refreshTimer = setTimeout(refreshCloudAndRender, 350);
 }
 function subscribeRealtime() {
   if (!live || !db.household?.id) return;
   if (realtimeChannel) sb.removeChannel(realtimeChannel);
-  realtimeChannel=sb.channel(`room-expense-${db.household.id}`)
-    .on('postgres_changes',{event:'*',schema:'public',table:'members',filter:`household_id=eq.${db.household.id}`},scheduleRefresh)
-    .on('postgres_changes',{event:'*',schema:'public',table:'expenses',filter:`household_id=eq.${db.household.id}`},scheduleRefresh)
-    .on('postgres_changes',{event:'*',schema:'public',table:'audit_log',filter:`household_id=eq.${db.household.id}`},scheduleRefresh)
-    .on('postgres_changes',{event:'*',schema:'public',table:'households',filter:`id=eq.${db.household.id}`},scheduleRefresh)
-    .subscribe(status => { if(status==='CHANNEL_ERROR') console.warn('Supabase Realtime channel error'); });
+  realtimeChannel = sb
+    .channel(`room-expense-${db.household.id}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "members",
+        filter: `household_id=eq.${db.household.id}`,
+      },
+      scheduleRefresh,
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "expenses",
+        filter: `household_id=eq.${db.household.id}`,
+      },
+      scheduleRefresh,
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "audit_log",
+        filter: `household_id=eq.${db.household.id}`,
+      },
+      scheduleRefresh,
+    )
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "households",
+        filter: `id=eq.${db.household.id}`,
+      },
+      scheduleRefresh,
+    )
+    .subscribe((status) => {
+      if (status === "CHANNEL_ERROR")
+        console.warn("Supabase Realtime channel error");
+    });
 }
 
-$('showSignup').onclick=()=>{show($('authModeLogin'),false);show($('authModeSignup'))};
-$('showLogin').onclick=()=>{show($('authModeSignup'),false);show($('authModeLogin'))};
-$('loginBtn').onclick=login;
-$('signupBtn').onclick=createHousehold;
-$('enterProfile').onclick=enterMember;
-$('backMembers').onclick=resetMemberScreen;
-$('logoutFromMember').onclick=logout;
-$('switchProfile').onclick=()=>{show($('appShell'),false);resetMemberScreen();show($('memberScreen'))};
-$('logoutBtn').onclick=logout;
+$("showSignup").onclick = () => {
+  show($("authModeLogin"), false);
+  show($("authModeSignup"));
+};
+$("showLogin").onclick = () => {
+  show($("authModeSignup"), false);
+  show($("authModeLogin"));
+};
+$("loginBtn").onclick = login;
+$("signupBtn").onclick = createHousehold;
+$("enterProfile").onclick = enterMember;
+$("backMembers").onclick = resetMemberScreen;
+$("logoutFromMember").onclick = logout;
+$("switchProfile").onclick = () => {
+  show($("appShell"), false);
+  resetMemberScreen();
+  show($("memberScreen"));
+};
+$("logoutBtn").onclick = logout;
 
-$('expenseForm').onsubmit=async e=>{
+$("expenseForm").onsubmit = async (e) => {
   e.preventDefault();
-  if(!session.member) return toast('Choose your roommate profile first',true);
-  const eid=$('expenseId').value, amt=Number($('amount').value);
-  if(!Number.isFinite(amt)||amt<=0)return toast('Enter a positive amount',true);
-  const date=$('expenseDate').value||new Date().toISOString().slice(0,10);
-  const obj={id:eid||id(),description:$('description').value.trim()||'Expense',amount:amt,payerId:session.member.id,date,category:$('category').value.trim(),notes:$('notes').value.trim(),createdBy:session.member.id,updatedAt:new Date().toISOString()};
+  if (!session.member) return toast("Choose your roommate profile first", true);
+  const eid = $("expenseId").value,
+    amt = Number($("amount").value);
+  if (!Number.isFinite(amt) || amt <= 0)
+    return toast("Enter a positive amount", true);
+  const date = $("expenseDate").value || new Date().toISOString().slice(0, 10);
+  const obj = {
+    id: eid || id(),
+    description: $("description").value.trim() || "Expense",
+    amount: amt,
+    payerId: session.member.id,
+    date,
+    category: $("category").value.trim(),
+    notes: $("notes").value.trim(),
+    createdBy: session.member.id,
+    updatedAt: new Date().toISOString(),
+  };
   try {
     await ensureCloudReady();
-    if(eid){
-      const old=db.expenses.find(x=>x.id===eid);
-      if(!old||old.payerId!==session.member.id)return toast('You can only correct your own expense',true);
-      const {error}=await sb.from('expenses').update({description:obj.description,amount:obj.amount,payer_member_id:obj.payerId,expense_date:obj.date,category:obj.category||null,notes:obj.notes||null,updated_at:obj.updatedAt}).eq('id',eid).eq('household_id',db.household.id).eq('payer_member_id',session.member.id);
-      if(error)throw error;
-      await insertAudit('Corrected expense','expense',eid,`${money(old.amount)} → ${money(obj.amount)} · ${obj.description}`);
+    if (eid) {
+      const old = db.expenses.find((x) => x.id === eid);
+      if (!old || old.payerId !== session.member.id)
+        return toast("You can only correct your own expense", true);
+      const { error } = await sb
+        .from("expenses")
+        .update({
+          description: obj.description,
+          amount: obj.amount,
+          payer_member_id: obj.payerId,
+          expense_date: obj.date,
+          category: obj.category || null,
+          notes: obj.notes || null,
+          updated_at: obj.updatedAt,
+        })
+        .eq("id", eid)
+        .eq("household_id", db.household.id)
+        .eq("payer_member_id", session.member.id);
+      if (error) throw error;
+      await insertAudit(
+        "Corrected expense",
+        "expense",
+        eid,
+        `${money(old.amount)} → ${money(obj.amount)} · ${obj.description}`,
+      );
     } else {
-      const {error}=await sb.from('expenses').insert({id:obj.id,household_id:db.household.id,description:obj.description,amount:obj.amount,payer_member_id:obj.payerId,expense_date:obj.date,category:obj.category||null,notes:obj.notes||null,created_by_member_id:obj.createdBy,updated_at:obj.updatedAt});
-      if(error)throw error;
-      await insertAudit('Added expense','expense',obj.id,`Added ${obj.description} (${money(obj.amount)})`);
+      const { error } = await sb.from("expenses").insert({
+        id: obj.id,
+        household_id: db.household.id,
+        description: obj.description,
+        amount: obj.amount,
+        payer_member_id: obj.payerId,
+        expense_date: obj.date,
+        category: obj.category || null,
+        notes: obj.notes || null,
+        created_by_member_id: obj.createdBy,
+        updated_at: obj.updatedAt,
+      });
+      if (error) throw error;
+      await insertAudit(
+        "Added expense",
+        "expense",
+        obj.id,
+        `Added ${obj.description} (${money(obj.amount)})`,
+      );
     }
-    await loadCloud(); resetExpense(); render(); toast('Expense saved to shared cloud');
-  } catch(e){handleDbError(e,'Expense was not saved.');}
+    await loadCloud();
+    resetExpense();
+    render();
+    toast("Expense saved to shared cloud");
+  } catch (e) {
+    handleDbError(e, "Expense was not saved.");
+  }
 };
 
-function resetExpense(){ $('expenseForm').reset(); $('expenseId').value=''; $('expenseDate').value=new Date().toISOString().slice(0,10); }
-$('cancelEdit').onclick=resetExpense;
+function resetExpense() {
+  $("expenseForm").reset();
+  $("expenseId").value = "";
+  $("expenseDate").value = new Date().toISOString().slice(0, 10);
+}
+$("cancelEdit").onclick = resetExpense;
 
-window.editExpense=eid=>{const e=db.expenses.find(x=>x.id===eid);if(!e||e.payerId!==session.member?.id)return;Object.assign($('expenseId'),{value:e.id});$('description').value=e.description;$('amount').value=e.amount;$('expenseDate').value=e.date;$('category').value=e.category;$('notes').value=e.notes;document.querySelector('[data-tab="expenses"]').click();};
+window.editExpense = (eid) => {
+  const e = db.expenses.find((x) => x.id === eid);
+  if (!e || e.payerId !== session.member?.id) return;
+  Object.assign($("expenseId"), { value: e.id });
+  $("description").value = e.description;
+  $("amount").value = e.amount;
+  $("expenseDate").value = e.date;
+  $("category").value = e.category;
+  $("notes").value = e.notes;
+  document.querySelector('[data-tab="expenses"]').click();
+};
 
-window.deleteExpense=async eid=>{
-  const e=db.expenses.find(x=>x.id===eid);
-  if(!e||e.payerId!==session.member?.id)return toast('You can only delete your own expense',true);
-  if(!confirm(`Delete ${money(e.amount)} expense?`))return;
-  try{
+window.deleteExpense = async (eid) => {
+  const e = db.expenses.find((x) => x.id === eid);
+  if (!e || e.payerId !== session.member?.id)
+    return toast("You can only delete your own expense", true);
+  if (!confirm(`Delete ${money(e.amount)} expense?`)) return;
+  try {
     await ensureCloudReady();
-    const {error}=await sb.from('expenses').delete().eq('id',eid).eq('household_id',db.household.id).eq('payer_member_id',session.member.id);
-    if(error)throw error;
-    await insertAudit('Deleted expense','expense',eid,`Deleted ${e.description} (${money(e.amount)})`);
-    await loadCloud();render();toast('Expense deleted');
-  }catch(err){handleDbError(err,'Expense was not deleted.');}
+    const { error } = await sb
+      .from("expenses")
+      .delete()
+      .eq("id", eid)
+      .eq("household_id", db.household.id)
+      .eq("payer_member_id", session.member.id);
+    if (error) throw error;
+    await insertAudit(
+      "Deleted expense",
+      "expense",
+      eid,
+      `Deleted ${e.description} (${money(e.amount)})`,
+    );
+    await loadCloud();
+    render();
+    toast("Expense deleted");
+  } catch (err) {
+    handleDbError(err, "Expense was not deleted.");
+  }
 };
 
-$('roommateForm').onsubmit=async e=>{
+$("roommateForm").onsubmit = async (e) => {
   e.preventDefault();
-  if(!session.isAdmin)return toast('Admin access required',true);
-  const name=$('roommateName').value.trim(),pw=$('roommatePassword').value;
-  if(!name||pw.length<4)return toast('Name and a 4+ character profile password are required',true);
-  try{
+  if (!session.isAdmin) return toast("Admin access required", true);
+  const name = $("roommateName").value.trim(),
+    pw = $("roommatePassword").value;
+  if (!name || pw.length < 4)
+    return toast("Name and a 4+ character profile password are required", true);
+  try {
     await ensureCloudReady();
-    const r={id:id(),name,active:true,passwordHash:await hashPassword(pw),isAdmin:false};
-    const {error}=await sb.from('members').insert({id:r.id,household_id:db.household.id,name:r.name,active:true,password_hash:r.passwordHash,is_admin:false});
-    if(error)throw error;
-    await insertAudit('Added roommate','roommate',r.id,`Added ${name}`);
-    await loadCloud();$('roommateForm').reset();render();resetMemberScreen();toast(`${name} added to shared household`);
-  }catch(err){handleDbError(err,'Roommate was not added.');}
+    const r = {
+      id: id(),
+      name,
+      active: true,
+      passwordHash: await hashPassword(pw),
+      isAdmin: false,
+    };
+    const { error } = await sb.from("members").insert({
+      id: r.id,
+      household_id: db.household.id,
+      name: r.name,
+      active: true,
+      password_hash: r.passwordHash,
+      is_admin: false,
+    });
+    if (error) throw error;
+    await insertAudit("Added roommate", "roommate", r.id, `Added ${name}`);
+    await loadCloud();
+    $("roommateForm").reset();
+    render();
+    resetMemberScreen();
+    toast(`${name} added to shared household`);
+  } catch (err) {
+    handleDbError(err, "Roommate was not added.");
+  }
 };
 
-window.renameRoommate=async rid=>{if(!session.isAdmin)return;const r=db.roommates.find(x=>x.id===rid);if(!r)return;const n=prompt('New roommate name',r.name);if(!n?.trim()||n.trim()===r.name)return;try{await ensureCloudReady();const {error}=await sb.from('members').update({name:n.trim()}).eq('id',rid).eq('household_id',db.household.id);if(error)throw error;await insertAudit('Renamed roommate','roommate',rid,`${r.name} → ${n.trim()}`);await loadCloud();render();resetMemberScreen();toast('Roommate renamed');}catch(e){handleDbError(e,'Roommate was not renamed.');}};
-window.resetRoommatePassword=async rid=>{if(!session.isAdmin)return;const r=db.roommates.find(x=>x.id===rid);if(!r)return;const p=prompt(`New password for ${r.name}`);if(!p||p.length<4)return toast('Password must be at least 4 characters',true);try{await ensureCloudReady();const hash=await hashPassword(p);const {error}=await sb.from('members').update({password_hash:hash}).eq('id',rid).eq('household_id',db.household.id);if(error)throw error;await insertAudit('Reset roommate password','roommate',rid,`Password reset for ${r.name}`);await loadCloud();render();toast('Password reset');}catch(e){handleDbError(e,'Password was not reset.');}};
-window.toggleRoommate=async rid=>{if(!session.isAdmin)return;const r=db.roommates.find(x=>x.id===rid);if(!r)return;if(r.id===session.member.id&&r.active)return toast('You cannot deactivate your current profile',true);try{await ensureCloudReady();const next=!r.active;const {error}=await sb.from('members').update({active:next}).eq('id',rid).eq('household_id',db.household.id);if(error)throw error;await insertAudit(next?'Activated roommate':'Deactivated roommate','roommate',rid,`${r.name} is now ${next?'active':'inactive'}`);await loadCloud();render();resetMemberScreen();toast(`${r.name} ${next?'activated':'deactivated'}`);}catch(e){handleDbError(e,'Roommate status was not changed.');}};
+window.renameRoommate = async (rid) => {
+  if (!session.isAdmin) return;
+  const r = db.roommates.find((x) => x.id === rid);
+  if (!r) return;
+  const n = prompt("New roommate name", r.name);
+  if (!n?.trim() || n.trim() === r.name) return;
+  try {
+    await ensureCloudReady();
+    const { error } = await sb
+      .from("members")
+      .update({ name: n.trim() })
+      .eq("id", rid)
+      .eq("household_id", db.household.id);
+    if (error) throw error;
+    await insertAudit(
+      "Renamed roommate",
+      "roommate",
+      rid,
+      `${r.name} → ${n.trim()}`,
+    );
+    await loadCloud();
+    render();
+    resetMemberScreen();
+    toast("Roommate renamed");
+  } catch (e) {
+    handleDbError(e, "Roommate was not renamed.");
+  }
+};
+window.resetRoommatePassword = async (rid) => {
+  if (!session.isAdmin) return;
+  const r = db.roommates.find((x) => x.id === rid);
+  if (!r) return;
+  const p = prompt(`New password for ${r.name}`);
+  if (!p || p.length < 4)
+    return toast("Password must be at least 4 characters", true);
+  try {
+    await ensureCloudReady();
+    const hash = await hashPassword(p);
+    const { error } = await sb
+      .from("members")
+      .update({ password_hash: hash })
+      .eq("id", rid)
+      .eq("household_id", db.household.id);
+    if (error) throw error;
+    await insertAudit(
+      "Reset roommate password",
+      "roommate",
+      rid,
+      `Password reset for ${r.name}`,
+    );
+    await loadCloud();
+    render();
+    toast("Password reset");
+  } catch (e) {
+    handleDbError(e, "Password was not reset.");
+  }
+};
+window.toggleRoommate = async (rid) => {
+  if (!session.isAdmin) return;
+  const r = db.roommates.find((x) => x.id === rid);
+  if (!r) return;
+  if (r.id === session.member.id && r.active)
+    return toast("You cannot deactivate your current profile", true);
+  try {
+    await ensureCloudReady();
+    const next = !r.active;
+    const { error } = await sb
+      .from("members")
+      .update({ active: next })
+      .eq("id", rid)
+      .eq("household_id", db.household.id);
+    if (error) throw error;
+    await insertAudit(
+      next ? "Activated roommate" : "Deactivated roommate",
+      "roommate",
+      rid,
+      `${r.name} is now ${next ? "active" : "inactive"}`,
+    );
+    await loadCloud();
+    render();
+    resetMemberScreen();
+    toast(`${r.name} ${next ? "activated" : "deactivated"}`);
+  } catch (e) {
+    handleDbError(e, "Roommate status was not changed.");
+  }
+};
 
-window.jumpMonth=k=>{const[y,m]=k.split('-');viewMonth=new Date(+y,+m-1,1);render();document.querySelector('[data-tab="dashboard"]').click();};
-$('prevMonth').onclick=()=>{viewMonth.setMonth(viewMonth.getMonth()-1);render();};
-$('nextMonth').onclick=()=>{viewMonth.setMonth(viewMonth.getMonth()+1);render();};
+window.jumpMonth = (k) => {
+  const [y, m] = k.split("-");
+  viewMonth = new Date(+y, +m - 1, 1);
+  render();
+  document.querySelector('[data-tab="dashboard"]').click();
+};
+$("prevMonth").onclick = () => {
+  viewMonth.setMonth(viewMonth.getMonth() - 1);
+  render();
+};
+$("nextMonth").onclick = () => {
+  viewMonth.setMonth(viewMonth.getMonth() + 1);
+  render();
+};
 
-document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active');});
+document.querySelectorAll("nav button").forEach(
+  (b) =>
+    (b.onclick = () => {
+      document
+        .querySelectorAll("nav button")
+        .forEach((x) => x.classList.remove("active"));
+      document
+        .querySelectorAll(".tab")
+        .forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      $(b.dataset.tab).classList.add("active");
+    }),
+);
 
-$('exportBtn').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));a.download='room-expenses-cloud-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);};
-$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const x=JSON.parse(rd.result);if(!x.roommates||!x.expenses)throw Error();toast('Backup files can be exported for reference, but importing directly is disabled in shared cloud mode. Use the app controls so every change is written safely to Supabase.',true);}catch{toast('Invalid backup file',true);}};rd.readAsText(f);};
-$('resetBtn').onclick=()=>toast('Local database reset is disabled because shared application data lives in Supabase.',true);
-
-(async()=>{
-  show($('configNotice'), !live);
-  if(!live){ if($('configNotice')) $('configNotice').textContent='Cloud mode is not configured. Add your Supabase URL and publishable key to config.js. No application data will be stored locally.'; return; }
-  try{
-    const {data}=await sb.auth.getSession();
-    if(data.session){
-      await loadCloud();
-      show($('authScreen'),false); resetMemberScreen(); show($('memberScreen')); render();
+$("exportBtn").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(
+    new Blob([JSON.stringify(db, null, 2)], { type: "application/json" }),
+  );
+  a.download = "room-expenses-cloud-backup.json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$("importFile").onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    try {
+      const x = JSON.parse(rd.result);
+      if (!x.roommates || !x.expenses) throw Error();
+      toast(
+        "Backup files can be exported for reference, but importing directly is disabled in shared cloud mode. Use the app controls so every change is written safely to Supabase.",
+        true,
+      );
+    } catch {
+      toast("Invalid backup file", true);
     }
-  }catch(e){console.error(e);toast(e.message||'Could not load your cloud household.',true);}
-  sb.auth.onAuthStateChange((event)=>{
-    if(event==='SIGNED_OUT'){
-      if(realtimeChannel){sb.removeChannel(realtimeChannel);realtimeChannel=null;}
-      session={member:null,isAdmin:false};db={household:null,roommates:[],expenses:[],audit:[]};show($('appShell'),false);show($('memberScreen'),false);show($('authScreen'));
+  };
+  rd.readAsText(f);
+};
+$("resetBtn").onclick = () =>
+  toast(
+    "Local database reset is disabled because shared application data lives in Supabase.",
+    true,
+  );
+
+(async () => {
+  show($("configNotice"), !live);
+  if (!live) {
+    if ($("configNotice"))
+      $("configNotice").textContent =
+        "Cloud mode is not configured. Add your Supabase URL and publishable key to config.js. No application data will be stored locally.";
+    return;
+  }
+  try {
+    const { data } = await sb.auth.getSession();
+    if (data.session) {
+      await loadCloud();
+      show($("authScreen"), false);
+      resetMemberScreen();
+      show($("memberScreen"));
+      render();
+    }
+  } catch (e) {
+    console.error(e);
+    toast(e.message || "Could not load your cloud household.", true);
+  }
+  sb.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") {
+      if (realtimeChannel) {
+        sb.removeChannel(realtimeChannel);
+        realtimeChannel = null;
+      }
+      session = { member: null, isAdmin: false };
+      db = { household: null, roommates: [], expenses: [], audit: [] };
+      show($("appShell"), false);
+      show($("memberScreen"), false);
+      show($("authScreen"));
     }
   });
 })();

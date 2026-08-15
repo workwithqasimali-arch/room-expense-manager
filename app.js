@@ -40,13 +40,7 @@ function money(n) {
     }) + " SAR"
   );
 }
-const { data, error } = await sb.auth.signUp({
-  email,
-  password,
-  options: {
-    emailRedirectTo: window.location.origin,
-  },
-});
+
 function esc(s) {
   return String(s ?? "").replace(
     /[&<>"']/g,

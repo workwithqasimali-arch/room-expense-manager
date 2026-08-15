@@ -1,0 +1,5 @@
+name = "room-expense-manager"
+compatibility_date = "2026-08-15"
+
+[assets]
+directory = "."
